@@ -5,7 +5,7 @@
 #
 #   docker build -t banking-rag-nginx ./nginx
 
-FROM nginx:1.27-alpine
+FROM nginx:1.31-alpine
 
 RUN rm /etc/nginx/conf.d/default.conf 2>/dev/null || true
 COPY nginx.conf /etc/nginx/nginx.conf
