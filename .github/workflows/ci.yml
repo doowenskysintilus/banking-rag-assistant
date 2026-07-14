@@ -129,7 +129,7 @@ jobs:
       # `exit-code` to "1" once you've triaged the current baseline and want
       # new criticals to hard-fail the build from that point on.
       - name: Scan image for vulnerabilities (Trivy)
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: banking-rag-${{ matrix.name }}:ci
           format: sarif
