@@ -37,6 +37,13 @@ redis>=5.2.0
 # (BGERerankerProvider falls back to loading the same checkpoint via
 # sentence-transformers' CrossEncoder if this isn't installed).
 FlagEmbedding>=1.3.0
+# Neither sentence-transformers nor FlagEmbedding bounds its own transformers
+# dependency, so an unpinned install can pull a transformers major version that
+# removed APIs FlagEmbedding's reranker still calls internally (observed:
+# transformers 5.x dropped PreTrainedTokenizerBase.prepare_for_model, breaking
+# FlagEmbedding 1.4.0's compute_score_single_gpu with
+# "AttributeError: XLMRobertaTokenizer has no attribute prepare_for_model").
+transformers<5.0.0
 
 # Enterprise retrieval (backend.retrieval.enterprise) — hybrid/BM25/multi-query/
 # reranking pipeline built on LangChain. langchain_classic carries the retriever

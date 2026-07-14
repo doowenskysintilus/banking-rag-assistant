@@ -147,10 +147,20 @@ class ChatService:
             output_tokens=response.output_tokens,
         )
 
-    async def ask_stream(
+    async def prepare_stream(
         self, user_id: str, conversation_id: str | None, question: str
-    ) -> AsyncIterator[str]:
-        """Yields SSE-formatted text chunks, then persists the final message once complete."""
+    ) -> tuple[Conversation, list[ChatTurn]]:
+        """Resolves the conversation and persists the user's message — must be
+        awaited by the caller *before* opening the SSE stream (see `ask_stream`).
+
+        `ask_stream` is an async generator: none of its body runs until the
+        first `__anext__()`, which `StreamingResponse` only calls after it has
+        already sent the response headers. Anything that can raise (in
+        particular `_get_or_create_conversation`'s `NotFoundError` for a bad
+        conversation_id) must therefore happen here, in an ordinary coroutine,
+        while FastAPI's exception handlers can still turn it into a normal
+        HTTP error response.
+        """
         conversation = await self._get_or_create_conversation(user_id, conversation_id)
         history = await self._load_history(conversation.id) if conversation_id else []
 
@@ -160,7 +170,19 @@ class ChatService:
             )
         )
         await self._db.flush()
+        return conversation, history
 
+    async def ask_stream(
+        self,
+        user_id: str,
+        question: str,
+        conversation: Conversation,
+        history: list[ChatTurn],
+    ) -> AsyncIterator[str]:
+        """Yields SSE-formatted text chunks, then persists the final message once
+        complete. Callers must resolve `conversation`/`history` via
+        `prepare_stream` first — see that method's docstring for why.
+        """
         yield f"event: conversation\ndata: {json.dumps({'conversation_id': conversation.id})}\n\n"
 
         engine = self._require_rag_engine()

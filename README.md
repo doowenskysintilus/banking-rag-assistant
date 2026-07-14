@@ -6,6 +6,12 @@ An enterprise-grade Retrieval-Augmented Generation (RAG) assistant for banking a
 
 Banking RAG Assistant lets internal teams (support, compliance, risk) ask natural-language questions against internal banking documents (policies, regulations, contracts) and get grounded, cited answers — never an ungrounded guess. It's built around a strict retrieval → rerank → context-build → prompt → LLM pipeline, with a confidence gate that refuses to answer when the retrieved context isn't good enough, and every query is logged for compliance audit.
 
+## Screenshots
+
+| Login | Chat (grounded, cited answers) | Document management |
+|---|---|---|
+| ![Login](docs/screenshots/login.png) | ![Chat](docs/screenshots/chat.png) | ![Documents](docs/screenshots/documents.png) |
+
 ## Key features
 
 - **Anti-hallucination RAG pipeline**: hybrid (dense + BM25) retrieval, cross-encoder reranking, confidence scoring, and a strict grounding prompt that forces the model to cite sources or decline to answer.
@@ -70,6 +76,19 @@ pytest tests/unit/evaluation -q
 ```
 
 The evaluation suite is run as a separate process because `ragas` patches the asyncio event loop at import time (`nest_asyncio.apply()`), which is incompatible with the rest of the test suite in the same process.
+
+## Trying it out
+
+A sample fictional banking policy document is included at [`examples/sample_bank_policy_fr.txt`](examples/sample_bank_policy_fr.txt) (French) — covering overdraft fees, transfer limits, account opening/closing, capital ratios, dispute resolution, and card limits, each with a specific figure. Upload it from the Documents page, wait for it to reach `Indexed`, then try:
+
+| Question | Expected answer |
+|---|---|
+| Quels sont les frais de découvert non autorisé ? | 35 $ par transaction |
+| Quel est le plafond de virement instantané pour un particulier ? | 5 000 $ par jour |
+| Quel est le plafond de virement international mensuel ? | 25 000 $ par mois |
+| Quel est le ratio CET1 minimum requis ? | 4,5 % |
+| Combien de temps pour traiter une réclamation standard ? | 15 jours ouvrables |
+| Quel est le taux d'intérêt sur les prêts immobiliers ? | *Not in the document* — the assistant should decline to answer rather than invent a figure. This is the most important check: it validates the anti-hallucination grounding, not just retrieval. |
 
 ## Configuration
 

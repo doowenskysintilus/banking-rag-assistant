@@ -53,6 +53,23 @@ def hamming_distance(a: int, b: int) -> int:
     return bin(a ^ b).count("1")
 
 
+def to_signed_64(value: int) -> int:
+    """Reinterprets an unsigned 64-bit simhash as a signed 64-bit int.
+
+    `compute_simhash` can set bit 63, producing values up to 2**64-1, which
+    overflow a SQL INTEGER column (signed 64-bit) — this must be applied
+    before persisting `content_simhash`.
+    """
+    return value - (1 << 64) if value & (1 << 63) else value
+
+
+def from_signed_64(value: int) -> int:
+    """Inverse of `to_signed_64` — restores the unsigned 64-bit fingerprint
+    read back from storage so `hamming_distance`'s bit operations stay correct.
+    """
+    return value & ((1 << 64) - 1)
+
+
 def is_near_duplicate(
     simhash_a: int, simhash_b: int, threshold: int = _DEFAULT_NEAR_DUPLICATE_THRESHOLD
 ) -> bool:

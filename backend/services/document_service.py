@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.config import Settings
 from backend.core.exceptions import ConflictError, NotFoundError, ValidationAppError
 from backend.core.logging import get_logger
-from backend.ingestion.dedup import find_near_duplicate
+from backend.ingestion.dedup import find_near_duplicate, from_signed_64, to_signed_64
 from backend.ingestion.pipeline import get_ingestion_pipeline
 from backend.ingestion.versioning import DocumentRef, IngestionDecision, decide
 from backend.models.document import Document, DocumentChunk, DocumentStatus
@@ -91,7 +91,7 @@ class DocumentService:
             extracted_text=processed.cleaned_text,
             document_key=processed.document_key,
             content_hash=processed.metadata.content_hash,
-            content_simhash=processed.metadata.simhash,
+            content_simhash=to_signed_64(processed.metadata.simhash),
             language=processed.metadata.language,
             doc_metadata=processed.metadata.model_dump_json(),
             near_duplicate_of_id=near_duplicate_id,
@@ -240,7 +240,7 @@ class DocumentService:
                 Document.document_key != document_key,
             )
         )
-        candidates = [(row[0], row[1]) for row in result.all()]
+        candidates = [(row[0], from_signed_64(row[1])) for row in result.all()]
         return find_near_duplicate(
             simhash, candidates, threshold=_NEAR_DUPLICATE_THRESHOLD
         )

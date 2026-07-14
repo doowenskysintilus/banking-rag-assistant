@@ -1,0 +1,56 @@
+POLITIQUE INTERNE — BANQUE FICTIVE ATLAS
+Document de référence pour les agents du service client
+Version 3.2 — En vigueur depuis le 1er janvier 2026
+
+ARTICLE 1 — FRAIS DE DECOUVERT
+
+1.1 Les frais de découvert non autorisé s'élèvent à 35 $ par transaction.
+1.2 Le nombre de frais de découvert facturés est plafonné à 4 par jour ouvrable,
+soit un maximum de 140 $ par jour.
+1.3 Aucun frais de découvert n'est appliqué si le solde négatif est inférieur à 10 $.
+1.4 Les clients disposant du forfait "Essentiel Plus" bénéficient d'une remise de 50 %
+sur ces frais, soit 17,50 $ par transaction.
+
+ARTICLE 2 — VIREMENTS ET PLAFONDS
+
+2.1 Le plafond de virement instantané pour un particulier est de 5 000 $ par jour.
+2.2 Le plafond de virement international est de 25 000 $ par mois, sauf autorisation
+écrite du service conformité.
+2.3 Tout virement supérieur à 10 000 $ déclenche automatiquement une vérification
+de conformité KYC (Know Your Customer) avant exécution.
+2.4 Les virements internationaux vers les pays de la liste de surveillance GAFI
+sont bloqués par défaut et nécessitent une validation manuelle.
+
+ARTICLE 3 — OUVERTURE ET FERMETURE DE COMPTE
+
+3.1 L'ouverture d'un compte courant nécessite une pièce d'identité valide, un justificatif
+de domicile de moins de 3 mois, et un dépôt initial minimum de 50 $.
+3.2 Un compte inactif depuis plus de 24 mois est automatiquement classé "dormant"
+et des frais de gestion de 5 $ par mois s'appliquent.
+3.3 La fermeture d'un compte est gratuite si elle est demandée après plus de 90 jours
+d'ouverture ; des frais de fermeture anticipée de 25 $ s'appliquent avant ce délai.
+
+ARTICLE 4 — RATIO DE CAPITAL ET CONFORMITE REGLEMENTAIRE
+
+4.1 La banque maintient un ratio de capital de base de catégorie 1 (CET1) minimum
+de 4,5 %, conformément aux exigences de Bâle III.
+4.2 Le ratio de liquidité à court terme (LCR) est maintenu au-dessus de 100 % en
+permanence.
+4.3 Un audit interne du ratio de capital est réalisé trimestriellement par le
+service risque.
+
+ARTICLE 5 — LITIGES ET RECLAMATIONS
+
+5.1 Toute réclamation client doit recevoir un accusé de réception sous 48 heures.
+5.2 Le délai de traitement standard d'une réclamation est de 15 jours ouvrables,
+extensible à 35 jours pour les dossiers complexes transmis au médiateur bancaire.
+5.3 En cas de fraude avérée sur une carte bancaire, le remboursement intervient
+sous 10 jours ouvrables maximum après validation du dossier.
+
+ARTICLE 6 — CARTES BANCAIRES
+
+6.1 Le plafond de retrait par défaut est de 500 $ par jour pour une carte standard,
+et de 1 500 $ par jour pour une carte premium.
+6.2 Le plafond de paiement par défaut est de 3 000 $ par jour pour une carte standard.
+6.3 Toute carte signalée perdue ou volée est bloquée immédiatement et remplacée
+sous 5 jours ouvrables sans frais.

@@ -45,8 +45,11 @@ async def stream(
     current_user: User = Depends(get_current_user),
     chat_service: ChatService = Depends(get_chat_service),
 ) -> StreamingResponse:
-    generator = chat_service.ask_stream(
+    conversation, history = await chat_service.prepare_stream(
         current_user.id, payload.conversation_id, payload.question
+    )
+    generator = chat_service.ask_stream(
+        current_user.id, payload.question, conversation, history
     )
     return StreamingResponse(generator, media_type="text/event-stream")
 
