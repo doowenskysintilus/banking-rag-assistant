@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.pyc
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+
+# Local runtime data (auto-created by the app — see backend.retrieval.vector_store
+# .faiss_store and backend.services.document_service, both of which mkdir these on
+# first use, so they never need to be committed)
+vector_db/
+storage/
+*.db
+*.db-journal
+
+# deepeval writes a local telemetry/config cache here as a side effect of
+# running the evaluation test suite — not project source.
+.deepeval/
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+
+# Env files (never commit real secrets — see .env.example / frontend/.env.example)
+.env
+.env.*
+!.env.example
+!frontend/.env.example
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,28 @@
+# Shared storage for uploaded documents (backend.core.config.Settings.
+# document_storage_dir). Deliberately ReadWriteMany, NOT ReadWriteOnce: with
+# more than one backend replica (see backend-deployment.yaml), every pod
+# needs to see the same files — an upload landing on replica A must be
+# readable from replica B. This requires a StorageClass that actually
+# supports RWX (AWS EFS via the efs-csi-driver, Azure Files, GCP Filestore,
+# or an in-cluster NFS server) — if your cluster only has RWO storage
+# classes, either provision one of the above or run the backend at
+# replicas: 1 and change this to ReadWriteOnce.
+#
+# The FAISS vector index (faiss_index_dir) is deliberately NOT given a shared
+# volume here: FAISS writes its index as a single flat file with no
+# distributed-write coordination, so multiple replicas writing to the same
+# file concurrently would corrupt it. Running more than one backend replica
+# safely requires VECTOR_STORE_PROVIDER=pinecone (backend.retrieval.
+# vector_store already supports this as a drop-in alternative — see that
+# package's Strategy-pattern provider selection) instead of local FAISS, or
+# a single replica if you're staying on FAISS.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: document-storage
+  namespace: banking-rag
+spec:
+  accessModes: ["ReadWriteMany"]
+  resources:
+    requests:
+      storage: 50Gi

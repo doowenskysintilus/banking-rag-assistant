@@ -1,0 +1,45 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: banking-rag
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml # ⚠️ replace with a real Secret/SealedSecret/ExternalSecret before applying — see that file's header
+  - postgres-statefulset.yaml
+  - redis.yaml
+  - migration-job.yaml
+  - backend-storage.yaml
+  - backend-deployment.yaml
+  - backend-hpa.yaml
+  - frontend-deployment.yaml
+  - ingress.yaml
+  - networkpolicy.yaml
+  - servicemonitor.yaml
+  - prometheusrule.yaml
+
+# Ships the same dashboard JSON monitoring/grafana/dashboards/ uses for
+# docker-compose's Grafana — generated into a ConfigMap here (rather than a
+# second hand-copied YAML) so there's exactly one source file for it.
+# kube-prometheus-stack's Grafana sidecar auto-imports any ConfigMap labeled
+# grafana_dashboard: "1" in a matching namespace (its default watches all
+# namespaces — see that chart's `sidecar.dashboards.searchNamespace`).
+configMapGenerator:
+  - name: backend-overview-dashboard
+    files:
+      - ../../monitoring/grafana/dashboards/backend-overview.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+      disableNameSuffixHash: true
+
+images:
+  # Overridden per-environment (see overlays/production/kustomization.yaml)
+  # or directly by CI/CD via `kustomize edit set image`.
+  - name: banking-rag-backend
+    newName: banking-rag-backend
+    newTag: latest
+  - name: banking-rag-frontend
+    newName: banking-rag-frontend
+    newTag: latest

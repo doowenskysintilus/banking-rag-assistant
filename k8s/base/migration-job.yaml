@@ -1,0 +1,29 @@
+# Applies Alembic migrations exactly once per deploy — run this Job to
+# completion BEFORE rolling out backend-deployment.yaml (see
+# .github/workflows/cd.yml), not as an init container on every backend pod,
+# which would race multiple replicas against the same migration.
+#
+# `metadata.name` is suffixed with a build identifier at deploy time (see the
+# CD workflow's `kustomize edit set` step) since Jobs are immutable — a fixed
+# name would collide on the second deploy.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  namespace: banking-rag
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: banking-rag-backend:latest # overridden by kustomize images: (see kustomization.yaml)
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            - configMapRef: { name: backend-config }
+            - secretRef: { name: backend-secrets }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 512Mi }

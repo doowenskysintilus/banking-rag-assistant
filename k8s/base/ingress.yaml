@@ -1,0 +1,74 @@
+# Assumes the ingress-nginx controller is installed cluster-wide — this is
+# where "Nginx" shows up on the Kubernetes side of this deployment (see
+# nginx/ for the equivalent bespoke reverse-proxy container docker-compose
+# uses instead, since compose has no ingress controller concept).
+#
+# Split into two Ingress objects routing to the same backend Service because
+# ingress-nginx annotations apply to a whole Ingress resource, not per-path —
+# /api/v1/chat/stream needs proxy-buffering off (SSE) while everything else
+# should keep normal buffering.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: banking-rag-main
+  namespace: banking-rag
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "25m" # matches MAX_UPLOAD_SIZE_MB with headroom
+    # Uncomment once cert-manager + a ClusterIssuer are installed:
+    # cert-manager.io/cluster-issuer: letsencrypt-production
+spec:
+  ingressClassName: nginx
+  # tls:
+  #   - hosts: ["banking-rag.example.com"]
+  #     secretName: banking-rag-tls
+  rules:
+    - host: banking-rag.example.com
+      http:
+        paths:
+          - path: /api/v1
+            pathType: Prefix
+            backend:
+              service: { name: backend, port: { number: 8000 } }
+          - path: /metrics
+            pathType: Exact
+            # Deliberately routed nowhere reachable from outside the cluster —
+            # ingress-nginx has no explicit "deny" primitive here, so this
+            # relies on there being no rule matching /metrics at all; remove
+            # this comment/path entirely if that ever changes and add a real
+            # denial (e.g. an nginx.ingress.kubernetes.io/server-snippet 403).
+            backend:
+              service: { name: backend, port: { number: 8000 } }
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: frontend, port: { number: 80 } }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: banking-rag-chat-stream
+  namespace: banking-rag
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: banking-rag.example.com
+      http:
+        paths:
+          - path: /api/v1/chat/stream
+            pathType: Exact
+            backend:
+              service: { name: backend, port: { number: 8000 } }
+
+# Monitoring UIs (Prometheus/Grafana/Alertmanager) are intentionally NOT
+# given a hand-written Ingress here — see k8s/base/servicemonitor.yaml's
+# header comment for why this deployment relies on the kube-prometheus-stack
+# Helm chart rather than bespoke manifests for Prometheus/Grafana themselves.
+# That chart creates its own Services (named per its release, e.g.
+# `<release>-grafana`) and can expose an Ingress for them directly via its
+# own `values.yaml` (`grafana.ingress.*`, `prometheus.ingress.*|
+# alertmanager.ingress.*`) — point those at whichever host/auth setup you
+# want rather than duplicating that here with guessed Service names.

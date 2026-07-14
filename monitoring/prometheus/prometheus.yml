@@ -1,0 +1,35 @@
+# docker-compose scrape config — for Kubernetes, the equivalent scrape target
+# is declared declaratively via k8s/base/servicemonitor.yaml instead (assumes
+# kube-prometheus-stack / the Prometheus Operator is installed in-cluster;
+# this static file isn't used there).
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: production
+    service: banking-rag-assistant
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: banking-rag-backend
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["backend:8000"]
+        labels:
+          app: backend
+
+  - job_name: alertmanager
+    static_configs:
+      - targets: ["alertmanager:9093"]

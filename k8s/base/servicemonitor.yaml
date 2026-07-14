@@ -1,0 +1,33 @@
+# Requires the Prometheus Operator's CRDs to be installed — in practice this
+# means installing the kube-prometheus-stack Helm chart first:
+#
+#   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+#   helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+#     --namespace monitoring --create-namespace
+#
+# That chart brings Prometheus, Grafana, Alertmanager, the Operator itself,
+# node-exporter, and kube-state-metrics — the k8s-native equivalent of the
+# whole monitoring/ stack docker-compose.yml wires up by hand. This
+# ServiceMonitor just tells that already-running Prometheus to also scrape
+# the backend; it deploys none of the monitoring stack's components itself.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: backend
+  namespace: banking-rag
+  labels:
+    # Matches kube-prometheus-stack's default Prometheus `serviceMonitorSelector`
+    # (release label) — adjust to your actual Helm release name if this
+    # ServiceMonitor isn't picked up (`kubectl get prometheus -A -o yaml` to
+    # check the configured selector).
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames: ["banking-rag"]
+  selector:
+    matchLabels:
+      app: backend
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

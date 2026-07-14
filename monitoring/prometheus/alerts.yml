@@ -1,0 +1,100 @@
+# Alert rules against backend.monitoring.metrics' actual exported series —
+# see that module for exactly which metrics/labels exist. Kubernetes uses the
+# equivalent rules as a PrometheusRule CRD (k8s/base/prometheusrule.yaml) so
+# they're not duplicated by hand — keep the two in sync if you change one.
+
+groups:
+  - name: banking-rag-availability
+    rules:
+      - alert: BackendDown
+        expr: up{job="banking-rag-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backend target is down"
+          description: "Prometheus has not been able to scrape {{ $labels.instance }} for 1 minute."
+
+      - alert: BackendHighHttp5xxRate
+        expr: |
+          sum(rate(http_requests_total{status_code=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total[5m]))
+          > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "More than 5% of requests are failing with 5xx"
+          description: "{{ $value | humanizePercentage }} of requests over the last 5m returned a 5xx status."
+
+      - alert: BackendElevatedHttp5xxRate
+        expr: |
+          sum(rate(http_requests_total{status_code=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total[5m]))
+          > 0.01
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated 5xx rate"
+          description: "{{ $value | humanizePercentage }} of requests over the last 5m returned a 5xx status — below the critical threshold but worth a look."
+
+  - name: banking-rag-latency
+    rules:
+      - alert: HighRequestLatencyP95
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, path)) > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 HTTP latency above 2s on {{ $labels.path }}"
+          description: "95th percentile response time for {{ $labels.path }} has been above 2s for 10 minutes."
+
+      - alert: HighRagQueryLatencyP95
+        expr: |
+          histogram_quantile(0.95, sum(rate(rag_query_duration_seconds_bucket[10m])) by (le)) > 15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "RAG pipeline P95 latency above 15s"
+          description: "95th percentile end-to-end RAG query latency (retrieval + rerank + generation) has been above 15s for 10 minutes — check whether it's retrieval, the reranker, or the LLM call."
+
+  - name: banking-rag-security
+    rules:
+      - alert: AuthFailureSpike
+        expr: |
+          sum(rate(http_requests_total{path=~"/api/v1/auth/(login|token)", status_code="401"}[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated authentication failure rate"
+          description: "More than 0.5 failed logins/sec sustained for 5 minutes — check backend.core.audit for a spike in login_failed/account_locked events (possible credential-stuffing attempt)."
+
+  - name: banking-rag-ingestion
+    rules:
+      - alert: DocumentIngestionFailuresDetected
+        expr: increase(document_ingestion_total{status="failure"}[15m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Document ingestion failures in the last 15 minutes"
+          description: "{{ $value }} document(s) failed ingestion in the last 15m — check DocumentStatus=failed rows and their error_message."
+
+  - name: banking-rag-cost
+    rules:
+      - alert: LLMTokenUsageSpike
+        expr: sum(rate(llm_tokens_total[15m])) > 50000
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM token consumption rate is unusually high"
+          # Tune this threshold once you have a real traffic baseline — 50k
+          # tokens/sec sustained is a placeholder, not a measured norm.
+          description: "Sustained LLM token usage above 50k tokens/sec for 15m — check for a runaway client, an abusive user, or a prompt-caching regression driving up cost."

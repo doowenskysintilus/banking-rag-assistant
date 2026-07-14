@@ -1,0 +1,10 @@
+# Strategic-merge patch — bumps the base's demo-sized replica/scaling
+# numbers up for real production traffic. Tune these against your actual
+# measured load rather than treating them as correct out of the box.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend
+spec:
+  minReplicas: 3
+  maxReplicas: 20

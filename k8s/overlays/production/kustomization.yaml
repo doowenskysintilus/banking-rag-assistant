@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# CI/CD (.github/workflows/cd.yml) overwrites these two tags per-deploy via:
+#   kustomize edit set image banking-rag-backend=ghcr.io/OWNER/REPO-backend:SHA
+#   kustomize edit set image banking-rag-frontend=ghcr.io/OWNER/REPO-frontend:SHA
+# run from this directory — the values below are just what a manual
+# `kustomize build` without that step would produce (harmless placeholders,
+# not meant to be applied verbatim).
+images:
+  - name: banking-rag-backend
+    newName: ghcr.io/OWNER/REPO-backend
+    newTag: latest
+  - name: banking-rag-frontend
+    newName: ghcr.io/OWNER/REPO-frontend
+    newTag: latest
+
+patches:
+  - path: backend-replicas-patch.yaml
+  - path: ingress-host-patch.yaml

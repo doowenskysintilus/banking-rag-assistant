@@ -1,0 +1,106 @@
+name: CD
+
+# Runs after CI succeeds on main — not on every push directly, so a deploy
+# never ships code that hasn't passed lint/tests/build (see the `workflow_run`
+# trigger below). Requires branch protection on `main` requiring the CI
+# workflow to pass before merge for this guarantee to actually hold; without
+# that, someone could still push straight to main and this would fire
+# regardless of CI's own result on that same commit.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: # manual re-deploy of the current main, e.g. after a cluster incident
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_BASE: ghcr.io/${{ github.repository }}
+
+jobs:
+  build-and-push:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    outputs:
+      sha_tag: ${{ steps.tag.outputs.sha_tag }}
+    strategy:
+      matrix:
+        include:
+          - name: backend
+            context: .
+            dockerfile: backend/Dockerfile
+          - name: frontend
+            context: ./frontend
+            dockerfile: frontend/Dockerfile
+          - name: nginx
+            context: ./nginx
+            dockerfile: nginx/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - id: tag
+        run: echo "sha_tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.IMAGE_BASE }}-${{ matrix.name }}:${{ steps.tag.outputs.sha_tag }}
+            ${{ env.IMAGE_BASE }}-${{ matrix.name }}:latest
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: production # requires a manual approval gate if you configure one under Settings > Environments
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > "$HOME/.kube/config"
+        # KUBE_CONFIG must be a base64-encoded kubeconfig with access to the
+        # target cluster (`cat kubeconfig.yaml | base64 -w0`), stored as a
+        # repo/environment secret — not committed anywhere in this repo.
+
+      - name: Install kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+
+      - name: Point the production overlay at this build's images
+        working-directory: k8s/overlays/production
+        run: |
+          kustomize edit set image \
+            banking-rag-backend=${{ env.IMAGE_BASE }}-backend:${{ needs.build-and-push.outputs.sha_tag }} \
+            banking-rag-frontend=${{ env.IMAGE_BASE }}-frontend:${{ needs.build-and-push.outputs.sha_tag }}
+
+      - name: Run database migrations (one-shot Job, must finish before the rollout)
+        run: |
+          # Applied standalone (not part of the full `kustomize build`, which
+          # only manages backend/frontend/etc. as steady-state resources) and
+          # under a per-run name, since Jobs are immutable — reusing
+          # `db-migrate` on every deploy would fail applying the second time.
+          JOB_NAME="db-migrate-${{ needs.build-and-push.outputs.sha_tag }}"
+          sed "s/name: db-migrate/name: ${JOB_NAME}/" k8s/base/migration-job.yaml \
+            | sed "s#image: banking-rag-backend:latest#image: ${{ env.IMAGE_BASE }}-backend:${{ needs.build-and-push.outputs.sha_tag }}#" \
+            | kubectl apply -n banking-rag -f -
+          kubectl wait --for=condition=complete --timeout=300s -n banking-rag "job/${JOB_NAME}"
+
+      - name: Deploy
+        run: |
+          kustomize build k8s/overlays/production | kubectl apply -f -
+          kubectl rollout status deployment/backend -n banking-rag --timeout=300s
+          kubectl rollout status deployment/frontend -n banking-rag --timeout=180s

@@ -1,0 +1,80 @@
+# Default-deny plus explicit allows — defense in depth matching the same
+# spirit as backend.core.security_headers/backend.security.encryption: don't
+# rely on a single layer. Postgres/Redis are only ever reachable from the
+# backend (and the one-shot migration Job), never from the frontend or
+# outside the cluster.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: banking-rag
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-backend
+  namespace: banking-rag
+spec:
+  podSelector:
+    matchLabels: { app: backend }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        # From the ingress-nginx controller's own namespace (Prometheus's
+        # ServiceMonitor scrape traffic also originates in-cluster and is
+        # covered by allowing all namespaces on the metrics port below).
+        - namespaceSelector: {}
+      ports:
+        - port: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-frontend
+  namespace: banking-rag
+spec:
+  podSelector:
+    matchLabels: { app: frontend }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - port: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-to-postgres
+  namespace: banking-rag
+spec:
+  podSelector:
+    matchLabels: { app: postgres }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: backend } }
+        # The migration Job's pod template carries no extra label, so it
+        # inherits whatever the Job sets automatically (job-name=db-migrate);
+        # match on that too so `alembic upgrade head` can actually reach Postgres.
+        - podSelector: { matchLabels: { job-name: db-migrate } }
+      ports:
+        - port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-to-redis
+  namespace: banking-rag
+spec:
+  podSelector:
+    matchLabels: { app: redis }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: backend } }
+      ports:
+        - port: 6379

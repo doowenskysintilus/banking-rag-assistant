@@ -1,0 +1,80 @@
+fastapi>=0.115.6
+uvicorn[standard]>=0.32.1
+pydantic>=2.10.3
+pydantic-settings>=2.6.1
+email-validator>=2.2.0
+
+# Database
+sqlalchemy>=2.0.36
+asyncpg>=0.30.0
+aiosqlite>=0.20.0
+alembic>=1.14.0
+
+# Auth / security
+python-jose[cryptography]>=3.3.0
+bcrypt>=4.1.0
+python-multipart>=0.0.17
+# AES-256-GCM field encryption at rest (backend.security.encryption) — already a
+# transitive dependency of python-jose[cryptography], pinned directly here since
+# backend.security.encryption imports it itself rather than only through jose.
+cryptography>=43.0.0
+
+# LLM / RAG — chat completions (backend.llm.client) use the same OpenAI
+# account as the embeddings provider below (one `openai` package, one API key).
+faiss-cpu>=1.9.0
+pinecone>=5.4.0
+numpy>=1.26.4
+
+# Embeddings (backend.retrieval.embeddings) — providers: OpenAI (API), BGE-Large and
+# Instructor-XL (both local, via sentence-transformers / InstructorEmbedding). Also
+# provides the CrossEncoder fallback used by backend.retrieval.reranking.
+openai>=1.55.0
+sentence-transformers>=3.3.1
+InstructorEmbedding>=1.0.1
+redis>=5.2.0
+
+# Reranking (backend.retrieval.reranking) — BAAI's own library for the BGE reranker
+# (BGERerankerProvider falls back to loading the same checkpoint via
+# sentence-transformers' CrossEncoder if this isn't installed).
+FlagEmbedding>=1.3.0
+
+# Enterprise retrieval (backend.retrieval.enterprise) — hybrid/BM25/multi-query/
+# reranking pipeline built on LangChain. langchain_classic carries the retriever
+# implementations (Ensemble/MultiQuery/ContextualCompression) that moved out of the
+# `langchain` package as of its 1.0 restructuring; langchain-openai is only
+# imported when ENTERPRISE_MULTI_QUERY_ENABLED=true.
+langchain-core>=0.3.0
+langchain>=1.0.0
+langchain-classic>=1.0.0
+langchain-community>=0.4.0
+langchain-openai>=0.3.0
+rank-bm25>=0.2.2
+
+# RAG evaluation framework (backend.evaluation) — faithfulness/context_precision/
+# context_recall via RAGAS, answer_relevancy/hallucination_rate via DeepEval; both
+# are judged by this app's own OpenAI config (see backend.evaluation.providers).
+# KNOWN ISSUE at time of writing: every published `ragas`
+# release (through 0.4.x) unconditionally imports
+# `langchain_community.chat_models.vertexai`, a module `langchain-community`
+# removed as of its 0.4.0 "sunsetting" restructuring (see the pin above) — so
+# `ragas` currently fails to import in this project's own dependency set. This is
+# not fatal: backend.evaluation.selector.probe_availability does a real
+# trial-import (not just a presence check) and the service degrades gracefully,
+# skipping only the RAGAS-covered metrics (with a warning surfaced on the
+# report/dashboard) until upstream fixes this or ships a slimmer import.
+ragas>=0.4.3
+deepeval>=4.1.0
+
+# Document ingestion (extraction, language detection)
+pypdf>=5.1.0
+python-docx>=1.1.2
+openpyxl>=3.1.5
+beautifulsoup4>=4.12.3
+langdetect>=1.0.9
+
+# Resilience / observability
+tenacity>=9.0.0
+prometheus-client>=0.21.1
+
+# Utils
+python-dotenv>=1.0.1

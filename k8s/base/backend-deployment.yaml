@@ -1,0 +1,95 @@
+# replicas: 2 here demonstrates horizontal scaling (see backend-hpa.yaml) —
+# it assumes VECTOR_STORE_PROVIDER=pinecone (or another remote/shared vector
+# store) is set in backend-config; see backend-storage.yaml's comment on why
+# local FAISS + more than one replica is unsafe. Drop to 1 replica and this
+# still works fine with FAISS, just without HPA headroom.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: banking-rag
+  labels:
+    app: backend
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0 # never drop below `replicas` capacity during a rollout
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+      annotations:
+        # Tells the Prometheus Operator's pod-level discovery (if
+        # ServiceMonitor isn't used) where to scrape — harmless if
+        # servicemonitor.yaml is what's actually configured instead.
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: backend
+          image: banking-rag-backend:latest # overridden by kustomize images: (see kustomization.yaml)
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - configMapRef: { name: backend-config }
+            - secretRef: { name: backend-secrets }
+          volumeMounts:
+            - name: document-storage
+              mountPath: /app/storage/documents
+            - name: faiss-indices
+              mountPath: /app/vector_db/faiss_indices
+          resources:
+            requests: { cpu: 500m, memory: 1Gi }
+            limits: { cpu: "2", memory: 4Gi }
+          startupProbe:
+            httpGet: { path: /api/v1/health, port: http }
+            failureThreshold: 30 # allow up to 5 minutes for cold model loads (BGE/InstructorXL) before liveness kicks in
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /api/v1/health, port: http }
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /api/v1/health/ready, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false # sentence-transformers/HF caches write under the app user's home dir
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: document-storage
+          persistentVolumeClaim:
+            claimName: document-storage
+        - name: faiss-indices
+          emptyDir: {} # ephemeral — see backend-storage.yaml's comment; back with a PVC instead if running a single FAISS-backed replica that needs the index to survive pod restarts
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: banking-rag
+  labels:
+    app: backend
+spec:
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000

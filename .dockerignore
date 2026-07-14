@@ -1,0 +1,38 @@
+# Backend Docker build context (see backend/Dockerfile) — this repo's build
+# context is the root, so this file controls what's sent to the daemon for
+# BOTH backend/Dockerfile and (via its own frontend/.dockerignore) the
+# frontend build.
+.git
+.github
+.pytest_cache
+.venv
+venv
+**/__pycache__
+**/*.pyc
+**/.mypy_cache
+**/.ruff_cache
+
+# Local runtime state that must never ship inside an image — these are
+# exactly the directories backend/Dockerfile creates fresh and mounts as
+# volumes instead.
+vector_db/
+storage/
+*.db
+*.db-journal
+
+# Frontend (has its own image/build; irrelevant to the backend image and
+# excluded from its context to keep builds fast)
+frontend/node_modules
+frontend/dist
+
+# Editors / OS
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Docs and local env files (never bake real secrets into an image layer)
+docs/
+.env
+.env.*
+!.env.example

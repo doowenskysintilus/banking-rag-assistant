@@ -1,0 +1,85 @@
+# Same rules as monitoring/prometheus/alerts.yml (docker-compose's static
+# config), expressed as a PrometheusRule CRD for kube-prometheus-stack — see
+# servicemonitor.yaml's header for why this needs that chart installed
+# first. Keep the two files' `expr`/`for`/`annotations` in sync if you change
+# one; there was no clean way to generate one from the other without adding
+# a templating step this repo doesn't otherwise have.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: backend
+  namespace: banking-rag
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: banking-rag-availability
+      rules:
+        - alert: BackendDown
+          expr: up{job="backend"} == 0
+          for: 1m
+          labels: { severity: critical }
+          annotations:
+            summary: "Backend target is down"
+            description: "Prometheus has not been able to scrape {{ $labels.instance }} for 1 minute."
+
+        - alert: BackendHighHttp5xxRate
+          expr: |
+            sum(rate(http_requests_total{status_code=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+            > 0.05
+          for: 5m
+          labels: { severity: critical }
+          annotations:
+            summary: "More than 5% of requests are failing with 5xx"
+            description: "{{ $value | humanizePercentage }} of requests over the last 5m returned a 5xx status."
+
+    - name: banking-rag-latency
+      rules:
+        - alert: HighRequestLatencyP95
+          expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, path)) > 2
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "P95 HTTP latency above 2s on {{ $labels.path }}"
+            description: "95th percentile response time for {{ $labels.path }} has been above 2s for 10 minutes."
+
+        - alert: HighRagQueryLatencyP95
+          expr: histogram_quantile(0.95, sum(rate(rag_query_duration_seconds_bucket[10m])) by (le)) > 15
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "RAG pipeline P95 latency above 15s"
+            description: "95th percentile end-to-end RAG query latency has been above 15s for 10 minutes."
+
+    - name: banking-rag-security
+      rules:
+        - alert: AuthFailureSpike
+          expr: sum(rate(http_requests_total{path=~"/api/v1/auth/(login|token)", status_code="401"}[5m])) > 0.5
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "Elevated authentication failure rate"
+            description: "More than 0.5 failed logins/sec sustained for 5 minutes — possible credential-stuffing attempt."
+
+    - name: banking-rag-kubernetes
+      rules:
+        - alert: BackendPodCrashLooping
+          expr: increase(kube_pod_container_status_restarts_total{namespace="banking-rag", container="backend"}[15m]) > 3
+          for: 5m
+          labels: { severity: critical }
+          annotations:
+            summary: "Backend pod restarting repeatedly"
+            description: "{{ $labels.pod }} has restarted more than 3 times in 15 minutes."
+
+        - alert: BackendHPAMaxedOut
+          expr: |
+            kube_horizontalpodautoscaler_status_current_replicas{namespace="banking-rag", horizontalpodautoscaler="backend"}
+            >=
+            kube_horizontalpodautoscaler_spec_max_replicas{namespace="banking-rag", horizontalpodautoscaler="backend"}
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "Backend HPA at its max replica ceiling"
+            description: "The backend has been running at maxReplicas for 15 minutes — sustained load may need a higher ceiling (see backend-hpa.yaml) or a look at whether it's genuine traffic vs. a runaway client."

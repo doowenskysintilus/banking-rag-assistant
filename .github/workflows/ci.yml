@@ -1,0 +1,145 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+
+jobs:
+  backend-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check backend migrations tests
+      - run: ruff format --check backend migrations tests
+
+  backend-test:
+    runs-on: ubuntu-latest
+    env:
+      SECRET_KEY: ci-test-secret-key-not-for-production-use
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+
+      # Split into two invocations deliberately: `ragas` (backend.evaluation)
+      # calls nest_asyncio.apply() as a side effect of merely being imported
+      # (see backend/evaluation/providers/ragas_provider.py's module
+      # docstring), which patches asyncio process-wide and breaks unrelated
+      # tests using Starlette's TestClient (tests/unit/security/
+      # test_security_headers.py) if they run in the same pytest process
+      # afterward. Isolating tests/unit/evaluation in its own process
+      # contains the damage to that process only.
+      - name: Run unit tests (excluding evaluation)
+        run: pytest tests/unit --ignore=tests/unit/evaluation -q
+      - name: Run evaluation unit tests (isolated process — see step above)
+        run: pytest tests/unit/evaluation -q
+
+      - name: Verify Alembic migration applies and rolls back cleanly
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///./ci_migration_check.db
+
+  backend-typecheck:
+    runs-on: ubuntu-latest
+    continue-on-error: true # advisory only — the codebase isn't mypy-clean yet; see requirements-dev.txt
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: mypy backend
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx tsc -b --noEmit
+      - run: npx eslint .
+      - run: npm run build
+
+  docker-build:
+    needs: [backend-lint, backend-test, frontend]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: backend
+            context: .
+            dockerfile: backend/Dockerfile
+          - name: frontend
+            context: ./frontend
+            dockerfile: frontend/Dockerfile
+          - name: nginx
+            context: ./nginx
+            dockerfile: nginx/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build ${{ matrix.name }} image (not pushed — see cd.yml)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: false
+          load: true
+          tags: banking-rag-${{ matrix.name }}:ci
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      # Reports rather than blocks: base images (nginx/python/node) routinely
+      # carry *some* known CVEs against their upstream OS packages at any
+      # given moment — that's a constantly-moving target, not something this
+      # Dockerfile controls. Findings land in the repo's Security tab for
+      # triage; Dependabot (.github/dependabot.yml) is what actually drives
+      # the count down over time by proposing base-image bumps. Flip
+      # `exit-code` to "1" once you've triaged the current baseline and want
+      # new criticals to hard-fail the build from that point on.
+      - name: Scan image for vulnerabilities (Trivy)
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          image-ref: banking-rag-${{ matrix.name }}:ci
+          format: sarif
+          output: trivy-${{ matrix.name }}.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "0"
+
+      - name: Upload Trivy results to the Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-${{ matrix.name }}.sarif
+          category: trivy-${{ matrix.name }}
